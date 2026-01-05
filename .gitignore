@@ -1,0 +1,7 @@
+dados
+dados/*.xml
+venv
+.venv
+network1.json
+network1.keras
+.keras
