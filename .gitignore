@@ -4,4 +4,8 @@ venv
 .venv
 network1.json
 network1.keras
+cat_dog_1
+*/train/*
 .keras
+__pycache__/
+*.pyc
