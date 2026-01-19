@@ -5,6 +5,8 @@ venv
 network1.json
 network1.keras
 cat_dog_1
+cat_dog_2
+cat*
 */train/*
 .keras
 __pycache__/
