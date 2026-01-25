@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 from ultralytics import YOLO
@@ -6,6 +5,7 @@ from ultralytics import YOLO
 load_dotenv()
 
 YOLO_API_KEY = os.environ.get('ULTRALYTICS_API_KEY')
+print(f"Chave de API Ultralyics carregada: {YOLO_API_KEY}")
 
 def train_yolo():
     """Treina o modelo YOLO v8 com os parâmetros especificados"""
@@ -16,16 +16,20 @@ def train_yolo():
     
     training_params = {
         'data': 'ul://jotapeh/datasets/capsuladataset',
-        'epochs': 30,
-        'batch': 4,
+        'epochs': 50,  
+        'batch': 16,  
         'imgsz': 640,
         'project': 'jotapeh/example-project',
         'name': 'capsula',
+        'lr0': 0.02,  # Taxa inicial padrão
+        'lrf': 0.001,  # Diminuir até 0.1% da taxa inicial
+        'warmup_epochs': 5,
+        'weight_decay': 0.0001,  
+        'close_mosaic': 15,
+        'patience': 50,
         'device': 0,  
-        'patience': 20,  #early stopping
         'save': True,
         'plots': True,
-        'verbose': True,
     }
     
     print("Iniciando treinamento com os seguintes parâmetros:")

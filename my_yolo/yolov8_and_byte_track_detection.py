@@ -5,18 +5,21 @@ from collections import defaultdict, deque
 import time
 from model_config import Config
 from byte_tracker_detector import SimpleByteTrack
+from detection_data import DetectionData
 
 class ObjectDetector:
     """Detector de movimento e validação para PDV"""
 
     __frames_count = 0
     __tracks_ids_founds = set()
+    __self__detected_position: list[DetectionData] = []
     
     def __init__(self, config=None):
+
         self.config = config or Config()
         
         # Modelos
-        self.yolo_model = YOLO('C:/Users/joaog/OneDrive/Documentos/visao_computacional/runs/detect/jotapeh/example-project/capsula/weights/best.pt',  self.config.YOLO_MODEL)
+        self.yolo_model = YOLO('C:/Users/joaog/OneDrive/Documentos/visao_computacional/runs/detect/jotapeh/example-project/capsula4/weights/best.pt',  self.config.YOLO_MODEL)
         
         self.tracker = SimpleByteTrack(max_age=self.config.MAX_TRACK_AGE)
         
@@ -46,27 +49,37 @@ class ObjectDetector:
             conf=self.config.CONFIDENCE_THRESHOLD, 
             **self.config.YOLO_EXTRAS_PARAMS,
             verbose=False) 
+        #TODO verificar se está passando apenas um objeto por vez
+        #ao detectar objeto, verificar se o id já existe e dar um append nos seus atributos ao invez de criar um novo   
 
-        detections = []
+        detections = [] # [(x1, y1, x2, y2, conf, class_id, detection_time), ...]
         for r in results:
             boxes = r.boxes
             for box in boxes:
                 class_id = int(box.cls[0].cpu().numpy())
-                #if class_id != 0:  # Ignorar pessoas (class_id 0)
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                self.draw_rectangle_on_object(frame, (x1, y1, x2, y2))
                 conf = float(box.conf[0].cpu().numpy())
                 class_id = int(box.cls[0].cpu().numpy())
-                print(f"Classe identificada: {class_id}, Confiança: {conf:.2f}")
-                detections.append((x1, y1, x2, y2, conf, class_id))
-                
+                class_name = r.names[class_id]  
+                detection_time = time.time()
+                #print(f"Classe identificada: {class_name} ({class_id}), Confiança: {conf:.2f}")
+                detections.append((x1, y1, x2, y2, conf, class_id, detection_time))
+
+                if class_id == 0:
+                    self.draw_rectangle_on_object(frame, (x1, y1, x2, y2))
+
+        classes_found = set([d[5] for d in detections])
+        if len(classes_found) > 1:
+            print(f" Múltiplos objetos detectados: {classes_found}")
+            raise ValueError("Nenhum objeto detectado para rastreamento.")
+
         return detections
     
     def detect_hand(self, frame):
         """Placeholder para detecção de mão (será implementado depois)"""
         return []
     
-    def is_object_stopped_in_roi(self, track_data, roi, max_movement=20):
+    def is_object_stopped_in_roi(self, detection: DetectionData, track_data, roi, max_movement=20):
         """
         Verifica se objeto está parado dentro de uma ROI
         Retorna: (is_stopped, position_range)
@@ -91,81 +104,57 @@ class ObjectDetector:
         is_stopped = position_range <= max_movement
         
         return is_stopped, position_range
-    
-    def validate_trajectory(self, tracks, triggered_track_id):
+        
+    def validate_trajectory(self, trajectory_positions: list[DetectionData]):
         """
         Valida se o objeto fez trajetória válida de A para B
         E PERMANECEU PARADO EM B POR 3 SEGUNDOS
         """
-        print("Validando trajetória para track ID:", triggered_track_id, "track data: ", tracks)
-        # Pegar o track que foi marcado como primeiro após trigger
-        if triggered_track_id not in tracks:
-            return False, "Track disparado não encontrado"
+        if not trajectory_positions or len(trajectory_positions) == 0:
+            return False, "Nenhuma detecção encontrada"
         
-        track_data = tracks[triggered_track_id]
-        print(f"VALIDANDO TRACK {triggered_track_id}: ", track_data)
-        centroids = list(track_data['centroids'])
+        detection = trajectory_positions[0]
+        centroid_history = list(detection.centroid_history)
         
-        if len(centroids) < self.config.MIN_TRACK_LENGTH:
-            return False, "Rastreamento muito curto"
+        if len(centroid_history) < 2:
+            return False, "Trajetória muito curta"
         
-        # Verificar se começou em A
-        first_point = centroids[0]
-        last_point = centroids[-1]
+        first_point = centroid_history[0]
+        last_point = centroid_history[-1]
+
+        print(f"FIRST POINT: {first_point}, LAST POINT: {last_point} (Total de frames: {len(centroid_history)})")
         
         started_in_a = self.is_point_in_roi(first_point, self.config.ROI_A)
         ended_in_b = self.is_point_in_roi(last_point, self.config.ROI_B)
         
         if not started_in_a:
-            return False, f"Objeto não começou na zona A, iniciou em {first_point}, COMPLETE DATA: {track_data}"
+            return False, f"Objeto não começou na zona A, iniciou em {first_point}"
         
         if not ended_in_b:
             return False, "Objeto não terminou na zona B"
         
         print("Objeto iniciou em A e terminou em B, validando critérios...")
 
-        # Verificar distância mínima
         distance = np.sqrt((last_point[0] - first_point[0])**2 + 
                           (last_point[1] - first_point[1])**2)
         
         if distance < self.config.MIN_DISTANCE_A_TO_B:
             return False, f"Distância insuficiente: {distance:.1f}px"
         
-        # Verificar tempo
-        elapsed_time = time.time() - track_data['start_time']
+        elapsed_time = time.time() - detection.first_detection_time
         if elapsed_time > self.config.MAX_TIME_A_TO_B:
             return False, f"Tempo excedido: {elapsed_time:.2f}s"
         
-        # Validar continuidade (não pode teleportar)
         max_consecutive_distance = 0
-        for i in range(len(centroids) - 1):
-            d = np.sqrt((centroids[i+1][0] - centroids[i][0])**2 + 
-                       (centroids[i+1][1] - centroids[i][1])**2)
+        for i in range(len(centroid_history) - 1):
+            d = np.sqrt((centroid_history[i+1][0] - centroid_history[i][0])**2 + 
+                       (centroid_history[i+1][1] - centroid_history[i][1])**2)
             max_consecutive_distance = max(max_consecutive_distance, d)
         
-        if max_consecutive_distance > 100:  # Muito salto entre frames
+        if max_consecutive_distance > self.config.MAX_GAP_FRAMES:
             return False, f"Movimento descontínuo detectado"
         
-        # NOVO: Verificar se objeto está parado em B
-        is_stopped, movement = self.is_object_stopped_in_roi(
-            track_data, 
-            self.config.ROI_B,
-            self.config.MAX_MOVEMENT_IN_B
-        )
-        
-        #por enquanto retirado verificação da espera do objeto no roi b
-
-        # if not is_stopped:
-        #     return False, f"Objeto ainda está se movendo em B (movimento: {movement:.1f}px)"
-        
-        # Verificar tempo em B
-        # if self.arrived_in_b_time is None:
-        #     return False, "Objeto ainda não chegou em B"
-            
-        # time_in_b = time.time() - self.arrived_in_b_time
-        # if time_in_b < self.config.MIN_TIME_IN_ROI_B:
-        #     return False, f"Objeto em B por apenas {time_in_b:.1f}s (mínimo: {self.config.MIN_TIME_IN_ROI_B}s)"
-        return True, f"Trajetória válida! Item parado"#{time_in_b:.1f}s em B"
+        return True, f"Trajetória válida! Item parado"
     
     def trigger_detection(self):
         """Simula leitura de código de barras - TRIGGER"""
@@ -210,34 +199,72 @@ class ObjectDetector:
         # Se trigger ativo, procurar objeto em B (qualquer ID)
         if self.is_triggered:
             # Procurar qualquer objeto em zona B
-            best_track = None
+            best_track: DetectionData = None
 
             for track_id, track_data in tracks.items():
                 self.__tracks_ids_founds.add(track_id)
                 if len(track_data['centroids']) >= 2:
                     centroid = track_data['centroids'][-1]
                     if self.is_point_in_roi(centroid, self.config.ROI_B):
-                        best_track = (track_id, track_data)
+                        best_track = DetectionData(
+                            track_data['bboxes'][-1],
+                            centroid,
+                            None,
+                            track_id,
+                            time.time()
+                        )
                         break
-            
-            # Se encontrou objeto em B
+
+            detection_ids_founds = []
+
+            for det in detections:
+                    x1, y1, x2, y2, conf, class_id, detection_time = det
+                    detection_ids_founds.append(class_id)
+                    
+                    if class_id == 0:
+                        centroid = ((x1 + x2) / 2, (y1 + y2) / 2)
+                        #por enquanto sem tracker, utilizando apenas a detecção e garantindo que há apenas 1 objeto
+                        existing_detection = None
+                        for detection in self.__self__detected_position:
+                            if detection.class_id == class_id:
+                                existing_detection = detection
+                                break
+                        
+                        if existing_detection:
+                            existing_detection.update(
+                                (x1, y1, x2, y2),
+                                centroid,
+                                conf,
+                                detection_time
+                            )
+                            object_detection = existing_detection
+                        else:
+                            object_detection = DetectionData(
+                                (x1, y1, x2, y2),
+                                centroid,
+                                conf,
+                                class_id,
+                                detection_time)
+                            self.__self__detected_position.append(object_detection)
+                        
+                        if self.is_point_in_roi(centroid, self.config.ROI_B):
+                            best_track = object_detection
+
             if best_track:
-                track_id, best_track_data = best_track
-                print(f"Objeto em zona B detectado (Track ID: {track_id}, TRACK DATA: {best_track_data})")
+
+                print(f"IDS ENCONTRADO PELO DETECTOR {detection_ids_founds} - TOTAL DE OBJETOS ENCONTRADOS PELO DETECTOR: {len(self.__self__detected_position)}")
                 print("" + "="*60)
-                print("TRACKS IDS ENCONTRADOS ATÉ AGORA: ", self.__tracks_ids_founds)
+
                 # Marcar o primeiro track detectado após trigger
                 if self.triggered_track_id is None:
                     self.triggered_track_id = track_id
-                    print(f"📍 Marcado primeiro track após trigger: ID {track_id}")
+                    print(f" Marcado primeiro track após trigger: ID {track_id}")
                 
-                # Registrar primeira vez que chegou em B
                 if self.arrived_in_b_time is None:
                     self.arrived_in_b_time = time.time()
-                    print(f"✓ Objeto detectado na zona B (Track ID: {track_id})")
+                    print(f"Objeto detectado na zona B (Track ID: {track_id})")
                 
-                # Tentar validar
-                is_valid, message = self.validate_trajectory(tracks, self.triggered_track_id)
+                is_valid, message = self.validate_trajectory(self.__self__detected_position)
                 
                 if is_valid:
                     self.validation_result = {
@@ -254,18 +281,48 @@ class ObjectDetector:
                     print(f"\n VENDA NÃO CONFIRMADA")
                     print(f"  {message}")
                     self.is_triggered = False
+                    self.clean_read_frame_data()
+
             else:
                 # Reset se saiu de B antes de confirmar
                 if self.arrived_in_b_time is not None:
                     self.arrived_in_b_time = None
             
             # Timeout da detecção
-            if time.time() - self.trigger_time > self.config.MAX_TIME_A_TO_B + self.config.MIN_TIME_IN_ROI_B + 2:
-                self.is_triggered = False
-                print(" Timeout - nenhum movimento válido detectado")
+            if self.is_triggered:
+                tempo_decorrido = time.time() - self.trigger_time
+                tempo_maximo = self.config.MAX_TIME_A_TO_B + self.config.MIN_TIME_IN_ROI_B + 2
+                if tempo_decorrido > tempo_maximo:
+                    self.is_triggered = False
+                    self.clean_read_frame_data()
+                    print(" Timeout - nenhum movimento válido detectado")
         
         return frame, tracks, hands
     
+    def clean_read_frame_data(self):
+        """Limpa dados antigos"""
+        self.__frames_count = 0
+        self.trigger_time = None
+        self.__tracks_ids_founds.clear()
+        self.__self__detected_position.clear()
+        self.validation_result = None
+        self.arrived_in_b_time = None
+        self.triggered_track_id = None
+        self.is_triggered = False
+    
+    def clean_all_data(self):
+        self.__frames_count = 0
+        self.__tracks_ids_founds.clear()
+        self.__self__detected_position.clear()
+        self.validation_result = None
+        self.arrived_in_b_time = None
+        self.triggered_track_id = None
+        self.trigger_time = None
+        self.is_triggered = False
+        self.tracker.tracks.clear()
+
+
+
     def draw_frame(self, frame, tracks, hands):
         """Desenha informações no frame"""
         
@@ -331,6 +388,7 @@ class ObjectDetector:
 
 def main():
 
+
     print("Iniciando  Detector com YOLO + ByteTrack + MediaPipe")
     print("Controles:")
     print("  SPACE - TRIGGER DETECOTR")
@@ -353,31 +411,36 @@ def main():
     fps_clock = cv2.getTickCount()
     
     while True:
-        ret, frame = cap.read()
+        try:
+            ret, frame = cap.read()
 
-        frame, tracks, hands = detector.process_frame(frame)
-        
-        frame = detector.draw_frame(frame, tracks, hands)
-        
-        # FPS
-        fps = cv2.getTickFrequency() / (cv2.getTickCount() - fps_clock)
-        cv2.putText(frame, f"FPS: {fps:.1f}", 
-                   (detector.config.FRAME_WIDTH - 150, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        fps_clock = cv2.getTickCount()
-        
-        cv2.imshow("PDV Detector - YOLO + ByteTrack + MediaPipe", frame)
-  
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
-            break
-        elif key == ord(' '):
-            detector.trigger_detection()
-
-        if not ret:
-            print("Erro ao ler frame")
-            break
+            frame, tracks, hands = detector.process_frame(frame)
+            
+            frame = detector.draw_frame(frame, tracks, hands)
+            
+            # FPS
+            fps = cv2.getTickFrequency() / (cv2.getTickCount() - fps_clock)
+            cv2.putText(frame, f"FPS: {fps:.1f}", 
+                    (detector.config.FRAME_WIDTH - 150, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            fps_clock = cv2.getTickCount()
+            
+            cv2.imshow("PDV Detector - YOLO + ByteTrack + MediaPipe", frame)
     
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                break
+            elif key == ord(' '):
+                detector.trigger_detection()
+
+            if not ret:
+                print("Erro ao ler frame")
+                break
+
+        except Exception as e:
+            print(f"Erro ao processar frame: {e}")
+            break
+
     cap.release()
     cv2.destroyAllWindows()
     print("\nAplicação encerrada.")

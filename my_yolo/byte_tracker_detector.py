@@ -21,14 +21,15 @@ class SimpleByteTrack: #melhorar tracking
         # Calcular centróides das detecções
         detection_centroids = []
         for det in detections:
-            x1, y1, x2, y2, conf, class_id = det
+            x1, y1, x2, y2, conf, class_id, detection_time = det
             cx = (x1 + x2) / 2
             cy = (y1 + y2) / 2
             detection_centroids.append({
                 'centroid': (cx, cy),
                 'bbox': (x1, y1, x2, y2),
                 'conf': conf,
-                'class_id': class_id
+                'class_id': class_id,
+                'detection_time': detection_time
             })
         
         # Associar detecções com tracks existentes
