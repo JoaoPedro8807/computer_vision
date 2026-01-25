@@ -2,6 +2,8 @@ dados
 dados/*.xml
 venv
 .venv
+.env
+env
 runs
 runs/*
 network1.json
