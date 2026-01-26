@@ -1,6 +1,7 @@
 from collections import deque
 from typing import Tuple, Optional
-
+from dataclasses import dataclass
+import numpy as np
 
 class DetectionData:
     
@@ -10,6 +11,7 @@ class DetectionData:
         centroid: Tuple[float, float],
         conf: float,
         class_id: int,
+        initial_time: float,
         detection_time: float,
         class_name: Optional[str] = None
     ):
@@ -30,13 +32,14 @@ class DetectionData:
         bbox: Tuple[float, float, float, float],
         centroid: Tuple[float, float],
         conf: float,
+        initial_time: float,
         detection_time: float
     ) -> None:
         self.bbox = bbox
         self.centroid = centroid
         self.conf = conf
         self.detection_time = detection_time
-        
+        self.initial_time = initial_time
         self.centroid_history.append(centroid)
         self.bbox_history.append(bbox)
         self.conf_history.append(conf)
@@ -57,4 +60,13 @@ class DetectionData:
             f")"
         )
         
+
+@dataclass
+class ObjectDetectionData():
+    frame: np.ndarray
+    object: DetectionData
+
+
+
+
 

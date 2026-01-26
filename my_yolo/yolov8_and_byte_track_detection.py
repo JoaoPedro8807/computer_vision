@@ -3,9 +3,11 @@ import numpy as np
 from ultralytics import YOLO
 from collections import defaultdict, deque
 import time
-from model_config import Config
-from byte_tracker_detector import SimpleByteTrack
-from detection_data import DetectionData
+from .model_config import Config
+from .byte_tracker_detector import SimpleByteTrack
+from .detection_data import DetectionData
+from .detection_data import ObjectDetectionData
+from typing import Tuple, Optional, List, Dict
 
 class ObjectDetector:
     """Detector de movimento e validação para PDV"""
@@ -177,7 +179,7 @@ class ObjectDetector:
                 print(f"Frame {self.__frames_count} - Coordenadas: ({x}, {y})")
 
 
-    def process_frame(self, frame):
+    def process_frame(self, frame) -> Tuple[Optional[DetectionData], np.ndarray, Dict, List]:
         """Processa um frame completo"""
 
         self.__frames_count += 1
@@ -198,6 +200,7 @@ class ObjectDetector:
         
         # Se trigger ativo, procurar objeto em B (qualquer ID)
         if self.is_triggered:
+            object_to_return: DetectionData = None
             # Procurar qualquer objeto em zona B
             best_track: DetectionData = None
 
@@ -216,6 +219,7 @@ class ObjectDetector:
                         break
 
             detection_ids_founds = []
+            
 
             for det in detections:
                     x1, y1, x2, y2, conf, class_id, detection_time = det
@@ -224,6 +228,16 @@ class ObjectDetector:
                     if class_id == 0:
                         centroid = ((x1 + x2) / 2, (y1 + y2) / 2)
                         #por enquanto sem tracker, utilizando apenas a detecção e garantindo que há apenas 1 objeto
+                        object_to_return = DetectionData(
+                            (x1, y1, x2, y2),
+                            centroid,
+                            conf,
+                            class_id,
+                            self.trigger_time or time.time(),
+                            detection_time)
+                            
+                        
+
                         existing_detection = None
                         for detection in self.__self__detected_position:
                             if detection.class_id == class_id:
@@ -235,6 +249,7 @@ class ObjectDetector:
                                 (x1, y1, x2, y2),
                                 centroid,
                                 conf,
+                                self.trigger_time or time.time(),
                                 detection_time
                             )
                             object_detection = existing_detection
@@ -244,6 +259,7 @@ class ObjectDetector:
                                 centroid,
                                 conf,
                                 class_id,
+                                self.trigger_time or time.time(),
                                 detection_time)
                             self.__self__detected_position.append(object_detection)
                         
@@ -297,8 +313,17 @@ class ObjectDetector:
                     self.clean_read_frame_data()
                     print(" Timeout - nenhum movimento válido detectado")
         
-        return frame, tracks, hands
+        return object_to_return, frame, tracks, hands
     
+    def get_media_confidence(self):
+        """Retorna confiança média dos objetos detectados"""
+        if not self.__self__detected_position:
+            return 0.0
+        
+        total_confidence = sum([d.confidence for d in self.__self__detected_position])
+        return total_confidence / len(self.__self__detected_position)
+        
+
     def clean_read_frame_data(self):
         """Limpa dados antigos"""
         self.__frames_count = 0
@@ -321,6 +346,8 @@ class ObjectDetector:
         self.is_triggered = False
         self.tracker.tracks.clear()
 
+    def trigger_detection(self):
+        self.is_triggered = True
 
 
     def draw_frame(self, frame, tracks, hands):
@@ -383,14 +410,26 @@ class ObjectDetector:
                        cv2.FONT_HERSHEY_SIMPLEX, 1, result_color, 2)
         
         return frame
+def run_object_detector_only(frame: np.ndarray) -> ObjectDetectionData:
+    detector = ObjectDetector()
+    detector.trigger_detection()
+    try:
+        res = detector.process_frame(frame)
+        result = ObjectDetectionData(
+            frame=frame,
+            object=res[0],
+        )
+        return result
+
+    except Exception as e:
+        print(f"Erro ao processar detecção do objeto frame: {e}")
+        return None
 
 
 
 def main():
-
-
     print("Iniciando  Detector com YOLO + ByteTrack + MediaPipe")
-    print("Controles:")
+    print("Controles:")     
     print("  SPACE - TRIGGER DETECOTR")
     print("  Q     - Sair")
     print("-" * 60)
@@ -414,7 +453,7 @@ def main():
         try:
             ret, frame = cap.read()
 
-            frame, tracks, hands = detector.process_frame(frame)
+            object, frame, tracks, hands = detector.process_frame(frame)
             
             frame = detector.draw_frame(frame, tracks, hands)
             
