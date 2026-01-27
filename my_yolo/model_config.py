@@ -1,4 +1,4 @@
-class Config:
+class YoloConfig:
     # Câmera
     CAMERA_ID = 0
     FRAME_WIDTH = 1280
@@ -10,6 +10,7 @@ class Config:
     
     # YOLO
     YOLO_MODEL = "yolov8n.pt"
+    MY_OBJECT_WEIGHTS = "C:/Users/joaog/OneDrive/Documentos/visao_computacional/runs/detect/jotapeh/example-project/capsula4/weights/best.pt"  
     YOLO_EXTRAS_PARAMS = { # Parâmetros extras para o modelo YOLO
         'batch': 6, 
         'augment': True, # Augmentar imagens aumenta precisão de inferencia e diminui tempo de inferência

@@ -9,7 +9,7 @@ from .hand_detector import HandDetector
 from .hand import Hand
 from .detector_config import Config
 from .hand_data_class import DetectHandData
-from ..my_yolo import run_object_detector_only, ObjectDetectionData
+from ..my_yolo import  ObjectDetectionData, SimpleObjectDetector
 
 class HandMovementDetector:
     
@@ -147,20 +147,30 @@ def main():
         result = detector.process_frame(frame)
         
         # Mostrar
+        if result is not None and len(result.hands_detected) > 0:
+            object_detector = SimpleObjectDetector()
+            object_data = object_detector.process_frame(result.frame)
+            if object_data.object is not None:
+                stats = object_detector.get_detection_stats(object_data.object.class_id)
+                if stats:
+                    print(f"\rClasse: {stats['class_name']} | "
+                        f"Detecções: {stats['detection_count']} | "
+                        f"Conf média: {stats['avg_confidence']:.2f} | "
+                        f"Conf atual: {stats['current_confidence']:.2f}", end="")
+                        
+                if validate_object_data(object_data, target_object=0):
+                    print("Objeto alvo detectado com sucesso!")
+                else:
+                    print("Objeto alvo NÃO detectado.") 
+        else:
+            print("\rNenhum objeto detectado.", end="")
         
         
         #TODO exportar isso e o main para outro arquivo para centralizar o uso do my_yolo e hand_detector
         #TODO refatorar inferecnia do yolo. Está travando a img. Se possível em paralelo
         #TODO fazer acumulo de detecções para melhorar a confiabilidade e não ficar verificando de frame em frame
         #processa o objeto 
-        object_data = run_object_detector_only(frame)
-        object_detect = object_data.object if object_data else None
-        print("Objeto detectado:", object_detect)
-        
-        if validate_object_data(object_data, target_object=0):
-            print("Objeto alvo detectado com sucesso!")
-        else:
-            print("Objeto alvo NÃO detectado.") 
+
 
         cv2.imshow('Hand Movement Detection', result.frame)
 

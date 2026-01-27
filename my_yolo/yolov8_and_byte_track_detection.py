@@ -3,7 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 from collections import defaultdict, deque
 import time
-from .model_config import Config
+from .model_config import YoloConfig
 from .byte_tracker_detector import SimpleByteTrack
 from .detection_data import DetectionData
 from .detection_data import ObjectDetectionData
@@ -18,7 +18,7 @@ class ObjectDetector:
     
     def __init__(self, config=None):
 
-        self.config = config or Config()
+        self.config = config or YoloConfig()
         
         # Modelos
         self.yolo_model = YOLO('C:/Users/joaog/OneDrive/Documentos/visao_computacional/runs/detect/jotapeh/example-project/capsula4/weights/best.pt',  self.config.YOLO_MODEL)
@@ -209,12 +209,14 @@ class ObjectDetector:
                 if len(track_data['centroids']) >= 2:
                     centroid = track_data['centroids'][-1]
                     if self.is_point_in_roi(centroid, self.config.ROI_B):
+                        current_time = time.time()
                         best_track = DetectionData(
                             track_data['bboxes'][-1],
                             centroid,
-                            None,
-                            track_id,
-                            time.time()
+                            track_data.get('conf', 0.0),  # Usar conf do track ou 0.0
+                            track_data.get('class_id', 0),  # Usar class_id do track
+                            self.trigger_time or current_time,  # initial_time
+                            current_time  # detection_time
                         )
                         break
 
@@ -425,7 +427,23 @@ def run_object_detector_only(frame: np.ndarray) -> ObjectDetectionData:
         print(f"Erro ao processar detecção do objeto frame: {e}")
         return None
 
-
+def run_object_test():
+    cap = cv2.VideoCapture(0)
+    while True:
+        print("Iniciando detecção de objeto TEST...")
+        ret, frame = cap.read()
+        if not ret:
+            break
+        res = run_object_detector_only(frame)
+        if res is not None:
+            print("DETEÇÃO: ", res.object)
+            if res:
+                cv2.imshow("Frame", res.frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+        else:
+            print("Nenhum objeto detectado.")
+    
 
 def main():
     print("Iniciando  Detector com YOLO + ByteTrack + MediaPipe")
@@ -486,4 +504,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    #main()
+    run_object_test()
