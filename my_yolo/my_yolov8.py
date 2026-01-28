@@ -25,7 +25,7 @@ class SimpleObjectDetector:
         """
         self.config = config or YoloConfig()
 
-        model_path = model_path or self.config.MY_OBJECT_WEIGHTS
+        model_path = model_path or self.config.YOLO_MODEL
         
         if model_path:
             self.yolo_model = YOLO(model_path)

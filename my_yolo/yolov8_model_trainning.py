@@ -30,6 +30,7 @@ def train_yolo():
         'device': 0,  
         'save': True,
         'plots': True,
+
     }
     
     print("Iniciando treinamento com os seguintes parâmetros:")

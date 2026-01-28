@@ -197,10 +197,10 @@ class ObjectDetector:
 
         # Detectar mão
         hands = self.detect_hand(frame)
-        
+        object_to_return: DetectionData = None
         # Se trigger ativo, procurar objeto em B (qualquer ID)
         if self.is_triggered:
-            object_to_return: DetectionData = None
+            
             # Procurar qualquer objeto em zona B
             best_track: DetectionData = None
 
@@ -267,7 +267,7 @@ class ObjectDetector:
                         
                         if self.is_point_in_roi(centroid, self.config.ROI_B):
                             best_track = object_detection
-
+            print("Objeto detectado : ", object_to_return)
             if best_track:
 
                 print(f"IDS ENCONTRADO PELO DETECTOR {detection_ids_founds} - TOTAL DE OBJETOS ENCONTRADOS PELO DETECTOR: {len(self.__self__detected_position)}")
@@ -329,7 +329,6 @@ class ObjectDetector:
     def clean_read_frame_data(self):
         """Limpa dados antigos"""
         self.__frames_count = 0
-        self.trigger_time = None
         self.__tracks_ids_founds.clear()
         self.__self__detected_position.clear()
         self.validation_result = None
@@ -344,7 +343,7 @@ class ObjectDetector:
         self.validation_result = None
         self.arrived_in_b_time = None
         self.triggered_track_id = None
-        self.trigger_time = None
+        #self.trigger_time = None
         self.is_triggered = False
         self.tracker.tracks.clear()
 
@@ -468,10 +467,13 @@ def main():
     fps_clock = cv2.getTickCount()
     
     while True:
-        try:
+        #try:
             ret, frame = cap.read()
 
             object, frame, tracks, hands = detector.process_frame(frame)
+
+            if object is not None:
+                print("Objeto detectado:", object.class_id, object.class_name)
             
             frame = detector.draw_frame(frame, tracks, hands)
             
@@ -494,9 +496,9 @@ def main():
                 print("Erro ao ler frame")
                 break
 
-        except Exception as e:
-            print(f"Erro ao processar frame: {e}")
-            break
+        # except Exception as e:
+        #     print(f"Erro ao processar frame: {e}")
+        #     break
 
     cap.release()
     cv2.destroyAllWindows()
@@ -504,5 +506,4 @@ def main():
 
 
 if __name__ == "__main__":
-    #main()
-    run_object_test()
+    main()

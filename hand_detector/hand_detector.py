@@ -8,7 +8,6 @@ from .hand import Hand
 from typing import Tuple, List
 
 
-
 class HandDetector:
     """Detector de mãos usando MediaPipe"""
     

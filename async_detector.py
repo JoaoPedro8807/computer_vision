@@ -1,7 +1,12 @@
 import threading
 import queue
+
+from .hand_detector.hand_data_class import DetectHandData
+from .hand_detector.hand import Hand
+from .my_yolo.detection_data import ObjectDetectionData
 from .my_yolo.my_yolov8 import SimpleObjectDetector
 from .hand_detector.hand_detector import HandDetector
+from .hand_detector.HandMovimentDetector import HandMovementDetector
 
 
 class AsyncDetectorManager:
@@ -15,7 +20,9 @@ class AsyncDetectorManager:
         self.hand_result_queue = queue.Queue(maxsize=1)
         self.object_result_queue = queue.Queue(maxsize=1)
         
-        self.hand_detector = HandDetector(max_hands=2, confidence=0.5)
+
+        #self.hand_detector = HandDetector(max_hands=2, confidence=0.5)
+        self.hand_movement_detector = HandMovementDetector()
         self.object_detector = SimpleObjectDetector()
         
         self.running = True
@@ -36,13 +43,19 @@ class AsyncDetectorManager:
                     break
                 
                 # Executar inferência
-                result = self.hand_detector.detect_hands(frame)
+                result = self.hand_movement_detector.process_frame(frame)
+                
+                # Verifica se moveu de roi a para roi b
+                is_moving_to_b = result.movement_a_to_b
+                is_moving_to_a = result.movement_b_to_a
+
+                #result = result.hands_detected
                 
                 # Colocar resultado na queue
                 try:
                     self.hand_result_queue.put_nowait(result)
                 except queue.Full:
-                    pass  # Descartar se queue está cheia
+                    pass  
                     
             except queue.Empty:
                 continue
@@ -62,7 +75,7 @@ class AsyncDetectorManager:
                 try:
                     self.object_result_queue.put_nowait(result)
                 except queue.Full:
-                    pass  # Descartar se queue está cheia
+                    pass  
                     
             except queue.Empty:
                 continue
@@ -81,14 +94,14 @@ class AsyncDetectorManager:
         except queue.Full:
             pass
     
-    def get_hand_result(self):
+    def get_hand_result(self) -> DetectHandData:
         """Obter resultado de hand detector (não bloqueia)"""
         try:
             return self.hand_result_queue.get_nowait()
         except queue.Empty:
             return None
     
-    def get_object_result(self):
+    def get_object_result(self) -> ObjectDetectionData:
         """Obter resultado de object detector (não bloqueia)"""
         try:
             return self.object_result_queue.get_nowait()

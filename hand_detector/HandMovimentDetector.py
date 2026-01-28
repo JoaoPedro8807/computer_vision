@@ -80,6 +80,15 @@ class HandMovementDetector:
             right_hand_history=list(self.right_hand_history)
         )
     
+    def draw_moviment_info(self, frame: np.ndarray, movement_a_to_b: bool, movement_b_to_a: bool) -> np.ndarray:
+        if movement_a_to_b:
+            cv2.putText(frame, "MOVIMENTO: A -> B", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        if movement_b_to_a:
+            cv2.putText(frame, "MOVIMENTO: B -> A", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        return frame
+
     def _draw_rois(self, frame: np.ndarray) -> np.ndarray:
         """Desenha ROIs no frame"""
         frame_copy = frame.copy()
