@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
 
@@ -64,7 +64,8 @@ class DetectionData:
 @dataclass
 class ObjectDetectionData():
     frame: np.ndarray
-    object: DetectionData
+    most_confident_object: DetectionData
+    objects: List[DetectionData]
 
 
 

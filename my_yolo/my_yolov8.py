@@ -63,7 +63,9 @@ class SimpleObjectDetector:
         for r in results:
             boxes = r.boxes
             for box in boxes:
-                # Extrair informações da detecção
+                if int(box.cls[0].cpu().numpy()) == 0:
+                    continue  # ignorando class person por enquanto
+                
                 class_id = int(box.cls[0].cpu().numpy())
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 conf = float(box.conf[0].cpu().numpy())
@@ -274,11 +276,13 @@ class SimpleObjectDetector:
             ObjectDetectionData com frame e objeto detectado (mais confiante)
         """
         detected_objects = self.detect_objects(frame)
+        
         most_confident = self.get_most_confident_detection()
         
         return ObjectDetectionData(
             frame=frame,
-            object=most_confident
+            objects=detected_objects,
+            most_confident_object=most_confident
         )
 
 

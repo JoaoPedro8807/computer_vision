@@ -57,13 +57,22 @@ def main():
         
 
         # Adicionar info de objeto se disponível
-        if object_result and object_result.object:
-            print(f"Objeto detectado: {object_result.object.class_name} ({object_result.object.class_id}) com confiança {object_result.object.conf:.2f}")
-            stats = async_manager.object_detector.get_detection_stats(object_result.object.class_id)
-            if stats:
-                text = f"Obj: {stats['class_name']} | Conf: {stats['avg_confidence']:.2f}"
-                cv2.putText(frame_with_hands, text, (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        if object_result and object_result.most_confident_object:
+            #print(f"Objeto detectado: {object_result.object.class_name} ({object_result.object.class_id}) com confiança {object_result.object.conf:.2f}")
+            ids = [obj.class_id for obj in object_result.objects]
+            for i, id in enumerate(ids):
+                stats = async_manager.object_detector.get_detection_stats(id)
+                if stats:
+                    text = f"Obj: {stats['class_name']} | Conf: {stats['avg_confidence']:.2f}"
+                    cv2.putText(frame_with_hands, text, (10, 30 + i*30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    
+            best_object_id = object_result.most_confident_object.class_id
+            if best_object_id is not None:
+                text = f"Best Obj: {object_result.most_confident_object.class_name} | Conf: {object_result.most_confident_object.conf:.2f}"
+                cv2.putText(frame_with_hands, text, (10, 30 + len(ids)*30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
         else:
             cv2.putText(frame_with_hands, "Obj: None", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)

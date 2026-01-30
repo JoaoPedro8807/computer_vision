@@ -35,7 +35,7 @@ class AsyncDetectorManager:
         self.object_thread.start()
     
     def _hand_detector_worker(self):
-        """Worker thread para hand detector"""
+        """ thread worker para o hand detector"""
         while self.running:
             try:
                 frame = self.hand_frame_queue.get(timeout=1)
@@ -61,7 +61,7 @@ class AsyncDetectorManager:
                 continue
     
     def _object_detector_worker(self):
-        """Worker thread para object detector"""
+        """thread worker para o object detector"""
         while self.running:
             try:
                 frame = self.object_frame_queue.get(timeout=1)
@@ -70,6 +70,9 @@ class AsyncDetectorManager:
                 
                 # Executar inferência
                 result = self.object_detector.process_frame(frame)
+                if result.objects is not None:
+                    for obj in result.objects:
+                        print(f"Objeto detectado: {obj.class_name} ({obj.class_id}) confianca: {obj.conf:.2f}")
                 
                 # Colocar resultado na queue
                 try:
@@ -81,35 +84,35 @@ class AsyncDetectorManager:
                 continue
     
     def detect_hands_async(self, frame):
-        """Enviar frame para detecção de mão (não bloqueia)"""
+        """handle frame para hand detector"""
         try:
             self.hand_frame_queue.put_nowait(frame)
         except queue.Full:
             pass
     
     def detect_objects_async(self, frame):
-        """Enviar frame para detecção de objeto (não bloqueia)"""
+        """handle frame para object detector"""
         try:
             self.object_frame_queue.put_nowait(frame)
         except queue.Full:
             pass
     
     def get_hand_result(self) -> DetectHandData:
-        """Obter resultado de hand detector (não bloqueia)"""
+        """get hand detector result """
         try:
             return self.hand_result_queue.get_nowait()
         except queue.Empty:
             return None
     
     def get_object_result(self) -> ObjectDetectionData:
-        """Obter resultado de object detector (não bloqueia)"""
+        """get object detector result """
         try:
             return self.object_result_queue.get_nowait()
         except queue.Empty:
             return None
     
     def stop(self):
-        """Para as worker threads"""
+        """stop the worker threads"""
         self.running = False
         self.hand_frame_queue.put(None)
         self.object_frame_queue.put(None)
